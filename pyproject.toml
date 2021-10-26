@@ -9,8 +9,14 @@ python = "^3.8"
 PySimpleGUI = "^4.51.6"
 pyperclip = "^1.8.2"
 srt = "^3.5.0"
+fugashi = {version = "^1.1.1", optional = true}
+unidic = {version = "^1.1.0", optional = true}
 
 [tool.poetry.dev-dependencies]
+pyinstaller = "^4.5.1"
+
+[tool.poetry.extras]
+fugashi = ["fugashi", "unidic"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
