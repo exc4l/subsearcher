@@ -221,7 +221,7 @@ def main():
                 if event[2][1] == 0:
                     pyperclip.copy(data[int(event[2][0] or 0)][0])
                     continue
-                pyperclip.copy(data[int(event[2][0] or 0)][1])
+                pyperclip.copy(data[int(event[2][0] or 0)][0])
                 mkvpath = change_suffixex_to_mkv(data[int(event[2][0] or 0)][-1])
                 subprocess.Popen(
                     [
