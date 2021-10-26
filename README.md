@@ -41,4 +41,4 @@ python -m unidic download
 needs to be executed to download the dictionary for fugashi to use.
 
 
-![](https://github.com/exc4l/subsearcher/blog/main/demo.gif)
+![](https://github.com/exc4l/subsearcher/blob/main/demo.gif)
