@@ -148,7 +148,7 @@ def search_word(word, srts, sfdict, parsedict, winhandle=None, tok_mode="Exact M
                 for r in res:
                     tabdata.append([word, sf, r.start])
         if tok_mode=="Exact + Tokenizer":
-            res = list()
+            tres = list()
             for s in parsedict[sf]:
                 text = clean_txt(remove_names(s.content))
                 for sen in text.split("\n"):
@@ -166,10 +166,11 @@ def search_word(word, srts, sfdict, parsedict, winhandle=None, tok_mode="Exact M
                         )
                     ]
                     if word in sen_tokens:
-                        res.append(s)
-            if len(res) > 0:
-                for r in res:
-                    tabdata.append([word, sf, r.start])
+                        tres.append(s)
+            if len(tres) > 0:
+                for r in tres:
+                    if r not in res:
+                        tabdata.append([word, sf, r.start])
         prog+=1
         if winhandle and prog % 5:
             winhandle["-PROG-"].update('█'*int(prog*fac))
