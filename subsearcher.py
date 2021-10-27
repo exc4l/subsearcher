@@ -14,6 +14,7 @@ import srt
 
 try:
     import fugashi
+
     TOKENIZER = True
 except ImportError as e:
     TOKENIZER = False
@@ -24,9 +25,9 @@ ICON = b"iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAQAAAAAYLlVAAAABGdBTUEAALGPC/xhBQAAACB
 sg.theme("Reddit")
 
 HIRAGANA = set(
-            "あえいおうかけきこくさしすせそたちつてとなにぬねのはひふへほ"
-            "まみむめもやゆよらりるれろわをんがぎぐげござじずぜぞだぢづ"
-            "でどばびぶべぼぱぴぷぺぽゃょゅっぁぃぉぅぇゎゝゐゑゔ"
+    "あえいおうかけきこくさしすせそたちつてとなにぬねのはひふへほ"
+    "まみむめもやゆよらりるれろわをんがぎぐげござじずぜぞだぢづ"
+    "でどばびぶべぼぱぴぷぺぽゃょゅっぁぃぉぅぇゎゝゐゑゔ"
 )
 
 KATAKANA = set(
@@ -35,12 +36,8 @@ KATAKANA = set(
     "デドバビブベボパピプペポょャュィョェァォッーゥヮヴヵヶﾘｫｶｯｮｼｵﾌｷﾏﾉﾀ"
 )
 SENTENCEMARKER = set("。、!！？」「』『（）〝〟)(\n")
-ALLKANJI = set(
-    chr(uni) for uni in range(ord("一"), ord("龯") + 1)
-) | set("〆々")
-ALLOWED = (
-    ALLKANJI | SENTENCEMARKER | KATAKANA | HIRAGANA
-)
+ALLKANJI = set(chr(uni) for uni in range(ord("一"), ord("龯") + 1)) | set("〆々")
+ALLOWED = ALLKANJI | SENTENCEMARKER | KATAKANA | HIRAGANA
 
 
 def parse_args():
@@ -126,18 +123,23 @@ def pretty_path(fpath):
         .strip()
     )
 
+
 def remove_names(text):
     return re.sub(r"\（(.*?)\）", "", text)
+
 
 def clean_txt(text):
     text = "".join(filter(ALLOWED.__contains__, text))
     text = re.sub(r"\n+", "\n", text)
     return text
 
-def search_word(word, srts, sfdict, parsedict, winhandle=None, tok_mode="Exact Match", tagger=None):
+
+def search_word(
+    word, srts, sfdict, parsedict, winhandle=None, tok_mode="Exact Match", tagger=None
+):
     tabdata = list()
-    fac = 51/len(srts)
-    prog=0
+    fac = 51 / len(srts)
+    prog = 0
     for sf in srts:
         if word in sfdict[sf]:
             res = list()
@@ -147,7 +149,7 @@ def search_word(word, srts, sfdict, parsedict, winhandle=None, tok_mode="Exact M
             if len(res) > 0:
                 for r in res:
                     tabdata.append([word, sf, r.start])
-        if tok_mode=="Exact + Tokenizer":
+        if tok_mode == "Exact + Tokenizer":
             tres = list()
             for s in parsedict[sf]:
                 text = clean_txt(remove_names(s.content))
@@ -159,11 +161,7 @@ def search_word(word, srts, sfdict, parsedict, winhandle=None, tok_mode="Exact M
                     sen_tokens = [
                         w
                         for w in sen_tokens
-                        if not (
-                            w in HIRAGANA
-                            or w in KATAKANA
-                            or w in SENTENCEMARKER
-                        )
+                        if not (w in HIRAGANA or w in KATAKANA or w in SENTENCEMARKER)
                     ]
                     if word in sen_tokens:
                         tres.append(s)
@@ -171,9 +169,9 @@ def search_word(word, srts, sfdict, parsedict, winhandle=None, tok_mode="Exact M
                 for r in tres:
                     if r not in res:
                         tabdata.append([word, sf, r.start])
-        prog+=1
+        prog += 1
         if winhandle and prog % 5:
-            winhandle["-PROG-"].update('█'*int(prog*fac))
+            winhandle["-PROG-"].update("█" * int(prog * fac))
             winhandle.refresh()
     prettydata = [[i[0], pretty_path(i[1]), i[2], i[1]] for i in tabdata]
     return prettydata
@@ -189,9 +187,9 @@ def change_suffixex_to_mkv(fpath):
 
 def get_layout(data, headings):
     if TOKENIZER:
-        options = ['Exact Match','Exact + Tokenizer']
+        options = ["Exact Match", "Exact + Tokenizer"]
     else:
-        options = ['Exact Match']
+        options = ["Exact Match"]
     layout = [
         [
             sg.Text(" " * 50),
@@ -202,7 +200,13 @@ def get_layout(data, headings):
         [
             sg.Text(" " * 50),
             sg.Text("Search Mode:", size=(10, 1)),
-            sg.Combo(options,default_value='Exact Match',key='-TOKENIZER-', readonly=True, auto_size_text=True),
+            sg.Combo(
+                options,
+                default_value="Exact Match",
+                key="-TOKENIZER-",
+                readonly=True,
+                auto_size_text=True,
+            ),
         ],
         [
             sg.Table(
@@ -223,8 +227,19 @@ def get_layout(data, headings):
                 enable_click_events=True,
             )
         ],  # Comment out to not enable header and other clicks
-        [sg.Text('', size=(50, 1), relief='sunken', font=('Courier', 2),
-                   text_color='blue', background_color='white',key='-PROG-', metadata=0),sg.Sizegrip()],
+        [
+            sg.Text(
+                "",
+                size=(50, 1),
+                relief="sunken",
+                font=("Courier", 2),
+                text_color="blue",
+                background_color="white",
+                key="-PROG-",
+                metadata=0,
+            ),
+            sg.Sizegrip(),
+        ],
         # [sg.ProgressBar(1, orientation='h', size=(20, 2), key='progress')],
     ]
     return layout
@@ -250,9 +265,13 @@ def main():
         try:
             tagger = fugashi.Tagger()
         except:
-            raise ImportError("Please execute 'python -m unidic download' inside your venv. Fugashi doesn't find the dictionary file")
+            raise ImportError(
+                "Please execute 'python -m unidic download' inside your venv. Fugashi doesn't find the dictionary file"
+            )
         if tagger.dictionary_info[0]["size"] < 872000:
-            raise ImportError("Please execute 'python -m unidic download' inside your venv. Fugashi seems to use the small dictionary")
+            raise ImportError(
+                "Please execute 'python -m unidic download' inside your venv. Fugashi seems to use the small dictionary"
+            )
     else:
         tagger = None
     inputs = parse_args()
@@ -287,7 +306,15 @@ def main():
             # prog+=1
             # window["-PROG-"].update('█'*prog)
             if values.get("-Search-") != "":
-                data = search_word(values.get("-Search-"), srts, sfdict, parsedict, tok_mode=values.get("-TOKENIZER-"), tagger=tagger, winhandle=window)
+                data = search_word(
+                    values.get("-Search-"),
+                    srts,
+                    sfdict,
+                    parsedict,
+                    tok_mode=values.get("-TOKENIZER-"),
+                    tagger=tagger,
+                    winhandle=window,
+                )
                 # print(data)
                 window["-TABLE-"].update(data)
         if isinstance(event, tuple):
