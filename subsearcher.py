@@ -140,16 +140,20 @@ def search_word(
     tabdata = list()
     fac = 51 / len(srts)
     prog = 0
+    if tagger:
+        tagres = tagger(word)[0]
+        tokword = tagres.feature.lemma if tagres.feature.lemma else tagres.surface
     for sf in srts:
-        if word in sfdict[sf]:
-            res = list()
-            for s in parsedict[sf]:
-                if word in s.content and "♬" != s.content[0]:
-                    res.append(s)
-            if len(res) > 0:
-                for r in res:
-                    tabdata.append([word, sf, r.start])
-        if tok_mode == "Exact + Tokenizer":
+        res = list()
+        if tok_mode != "Tokenizer":
+            if word in sfdict[sf]:
+                for s in parsedict[sf]:
+                    if word in s.content and s.content[0] not in ["♬","♪"]:
+                        res.append(s)
+                if len(res) > 0:
+                    for r in res:
+                        tabdata.append([word, sf, r.start])
+        if tok_mode == "Exact + Tokenizer" or tok_mode == "Tokenizer":
             tres = list()
             for s in parsedict[sf]:
                 text = clean_txt(remove_names(s.content))
@@ -158,12 +162,12 @@ def search_word(
                         w.feature.lemma.split("-")[0] if w.feature.lemma else w.surface
                         for w in tagger(sen)
                     ]
-                    sen_tokens = [
+                    sen_tokens = {
                         w
                         for w in sen_tokens
                         if not (w in HIRAGANA or w in KATAKANA or w in SENTENCEMARKER)
-                    ]
-                    if word in sen_tokens:
+                    }
+                    if word in sen_tokens or tokword in sen_tokens:
                         tres.append(s)
             if len(tres) > 0:
                 for r in tres:
@@ -187,7 +191,7 @@ def change_suffixex_to_mkv(fpath):
 
 def get_layout(data, headings):
     if TOKENIZER:
-        options = ["Exact Match", "Exact + Tokenizer"]
+        options = ["Exact Match", "Exact + Tokenizer", "Tokenizer"]
     else:
         options = ["Exact Match"]
     layout = [
@@ -338,7 +342,7 @@ def main():
                 mkvpath = change_suffixex_to_mkv(data[int(event[2][0] or 0)][-1])
                 subprocess.Popen(
                     [
-                        "mpv",
+                        playerpath,
                         mkvpath,
                         f"--start={data[int(event[2][0] or 0)][-2] - timedelta(seconds=5)}",
                     ]
