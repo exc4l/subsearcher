@@ -291,15 +291,24 @@ def main():
     search_list = [word for word in vocabs if word not in known and word not in igno]
     srts, sfdict, parsedict = parse_subtitles(srtpath)
 
-    data = list()
-    for word in search_list:
-        data.extend(search_word(word, srts, sfdict, parsedict))
+
+
     headings = ["Word", "Anime", "Word Occurence"]
-    layout = get_layout(data, headings)
+    layout = get_layout([], headings)
 
     window = sg.Window(
-        "Sub Searcher", layout, ttk_theme="vista", resizable=True, icon=ICON
+        "Sub Searcher", layout, ttk_theme="vista", resizable=True, icon=ICON, finalize=True
     )
+    data = list()
+    fac = 51 / len(search_list)
+    prog = 0
+    for word in search_list:
+        data.extend(search_word(word, srts, sfdict, parsedict))
+        prog += 1
+        if prog % 5:
+            window["-PROG-"].update("█" * int(prog * fac))
+            window.refresh()
+    window["-TABLE-"].update(data)
     while True:
         event, values = window.read()
         # print(event, values)
