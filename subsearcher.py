@@ -10,6 +10,7 @@ from pathlib import Path
 import pyperclip
 import PySimpleGUI as sg
 import srt
+import json
 
 try:
     from sudachipy import Dictionary, SplitMode
@@ -33,13 +34,53 @@ KATAKANA = set(
     "マミムメモヤユヨラリルレロワヲウンガギグゲゴザジズゼゾダヂヅ"
     "デドバビブベボパピプペポょャュィョェァォッーゥヮヴヵヶﾘｫｶｯｮｼｵﾌｷﾏﾉﾀ"
 )
+NUMBERS = set("0123456789０１２３４５６７８９")
 SENTENCEMARKER = set("。、!！？」「』『（）〝〟)(\n")
 ALLKANJI = set(chr(uni) for uni in range(ord("一"), ord("龯") + 1)) | set("〆々")
-ALLOWED = ALLKANJI | SENTENCEMARKER | KATAKANA | HIRAGANA
+ALLOWED = ALLKANJI | SENTENCEMARKER | KATAKANA | HIRAGANA | NUMBERS
 
 ROOT = Path(".").absolute().parts[0]
 HOME = Path.home()
 CONFNAME = "config.ini"
+
+
+def load_token_db(fpath):
+    with open(fpath, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    for key in data.keys():
+        for k, v in data[key].items():
+            data[key][k] = set(v)
+    return data
+
+
+def make_token_db(srts, srtpath, tagger):
+    if (srtpath / "token_db.json").is_file():
+        token_db = load_token_db(srtpath / "token_db.json")
+    cur_keys = token_db.keys()
+    if set([str(s) for s in srts]).issubset(cur_keys):
+        return token_db
+    sfdict = dict()
+    for sf in srts:
+        with open(sf, "r", encoding="utf-8") as f:
+            sfdict[sf] = f.read()
+    parsedict = dict()
+    for sf in srts:
+        if sf in cur_keys:
+            continue
+        tempdict = dict()
+        for s in list(srt.parse(sfdict[sf])):
+            text = clean_txt(remove_names(s.content))
+            toks = [w.normalized_form() for w in tagger.tokenize(text)]
+            toks = [
+                w
+                for w in toks
+                if not (w in HIRAGANA or w in KATAKANA or w in SENTENCEMARKER)
+            ]
+            tempdict[str(s.index)] = toks
+        parsedict[str(sf)] = tempdict
+    with open(srtpath / "token_db.json", "w", encoding="utf-8") as wr:
+        json.dump(parsedict, wr)
+    return parsedict
 
 
 def create_settings_win(conf):
@@ -181,7 +222,14 @@ def clean_txt(text):
 
 
 def search_word(
-    word, srts, sfdict, parsedict, winhandle=None, tok_mode="Exact Match", tagger=None
+    word,
+    srts,
+    sfdict,
+    parsedict,
+    winhandle=None,
+    tok_mode="Exact Match",
+    tagger=None,
+    token_db=None,
 ):
     """
     searches for a word inside the subtitles. first via checking if the word appears
@@ -207,17 +255,10 @@ def search_word(
                         tabdata.append([word, sf, r.start])
         if tok_mode == "Exact + Tokenizer" or tok_mode == "Tokenizer":
             tres = list()
-            for s in parsedict[sf]:
-                text = clean_txt(remove_names(s.content))
-                for sen in text.split("\n"):
-                    sen_tokens = [w.normalized_form() for w in tagger.tokenize(sen)]
-                    sen_tokens = {
-                        w
-                        for w in sen_tokens
-                        if not (w in HIRAGANA or w in KATAKANA or w in SENTENCEMARKER)
-                    }
-                    if word in sen_tokens or tokword in sen_tokens:
-                        tres.append(s)
+            for ps in parsedict[sf]:
+                content = token_db[str(sf)][str(ps.index)]
+                if word in content or tokword in content:
+                    tres.append(ps)
             if len(tres) > 0:
                 for r in tres:
                     if r not in res:
@@ -373,6 +414,7 @@ def main():
                     write_config(confpath, config)
                     settings_win.close()
     srtpath, vocpath, playpath, knowpath, ignopath = read_config_obj(config)
+
     headings = ["Word", "Anime", "Word Occurence"]
     layout = get_layout([], headings)
 
@@ -386,6 +428,7 @@ def main():
     )
     srts, sfdict, parsedict, data = search_vocab_list(config, mainwin)
     mainwin["-TABLE-"].update(data)
+    token_db = make_token_db(srts, srtpath, tagger)
     while True:
         window, event, values = sg.read_all_windows()
         # print(event, values)
@@ -410,6 +453,10 @@ def main():
                     srtpath, vocpath, playpath, knowpath, ignopath = read_config_obj(
                         config
                     )
+                    if (srtpath / "token_db.json").is_file():
+                        token_db = load_token_db(srtpath / "token_db.json")
+                    else:
+                        token_db = make_token_db(srts, srtpath, tagger)
                     mainwin["-TABLE-"].update(data)
         if event == "Search":
             # print(values)
@@ -423,6 +470,7 @@ def main():
                     parsedict,
                     tok_mode=values.get("-TOKENIZER-"),
                     tagger=tagger,
+                    token_db=token_db,
                     winhandle=window,
                 )
                 # print(data)
