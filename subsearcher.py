@@ -12,7 +12,7 @@ import PySimpleGUI as sg
 import srt
 
 try:
-    import fugashi
+    from sudachipy import Dictionary, SplitMode
 
     TOKENIZER = True
 except ImportError as e:
@@ -193,8 +193,8 @@ def search_word(
     fac = 51 / len(srts)
     prog = 0
     if tagger:
-        tagres = tagger(word)[0]
-        tokword = tagres.feature.lemma if tagres.feature.lemma else tagres.surface
+        tagres = tagger.tokenize(word)[0]
+        tokword = tagres.normalized_form()
     for sf in srts:
         res = list()
         if tok_mode != "Tokenizer":
@@ -210,10 +210,7 @@ def search_word(
             for s in parsedict[sf]:
                 text = clean_txt(remove_names(s.content))
                 for sen in text.split("\n"):
-                    sen_tokens = [
-                        w.feature.lemma.split("-")[0] if w.feature.lemma else w.surface
-                        for w in tagger(sen)
-                    ]
+                    sen_tokens = [w.normalized_form() for w in tagger.tokenize(sen)]
                     sen_tokens = {
                         w
                         for w in sen_tokens
@@ -343,16 +340,16 @@ def search_vocab_list(config, winhandle=None):
 
 def main():
     if TOKENIZER:
-        try:
-            tagger = fugashi.Tagger()
-        except:
-            raise ImportError(
-                "Please execute 'python -m unidic download' inside your venv. Fugashi doesn't find the dictionary file"
-            )
-        if tagger.dictionary_info[0]["size"] < 872000:
-            raise ImportError(
-                "Please execute 'python -m unidic download' inside your venv. Fugashi seems to use the small dictionary"
-            )
+        # try:
+        tagger = Dictionary(dict="full").create(mode=SplitMode.A)
+        # except:
+        #     raise ImportError(
+        #         "Please execute 'python -m unidic download' inside your venv. Fugashi doesn't find the dictionary file"
+        #     )
+        # if tagger.dictionary_info[0]["size"] < 872000:
+        #     raise ImportError(
+        #         "Please execute 'python -m unidic download' inside your venv. Fugashi seems to use the small dictionary"
+        #     )
     else:
         tagger = None
 
