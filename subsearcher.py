@@ -3,10 +3,28 @@ import random
 import re
 import string
 import subprocess
-from configparser import ConfigParser
+
 from datetime import datetime, timedelta
 from pathlib import Path
-
+from modules.text_manipulation import (
+    check_allowed_char,
+    remove_names,
+    clean_txt,
+    change_suffix_to_mkv,
+    pretty_path,
+)
+from modules.vocab_analyzer import analyze_data
+import modules.yomichan_parser as yp
+from modules.token_db_parser import make_token_db, load_token_db
+from modules.config_helper import (
+    read_config_obj,
+    check_config_valid,
+    make_default_config,
+    check_required_settings,
+    config_from_values,
+    write_config,
+    get_config_parser,
+)
 import pyperclip
 import PySimpleGUI as sg
 import srt
@@ -44,47 +62,34 @@ HOME = Path.home()
 CONFNAME = "config.ini"
 
 
-def load_token_db(fpath):
-    with open(fpath, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    for key in data.keys():
-        for k, v in data[key].items():
-            data[key][k] = set(v)
-    return data
-
-
-def make_token_db(srts, srtpath, tagger):
-    if (srtpath / "token_db.json").is_file():
-        token_db = load_token_db(srtpath / "token_db.json")
-    cur_keys = token_db.keys()
-    if set([str(s) for s in srts]).issubset(cur_keys):
-        return token_db
-    sfdict = dict()
-    for sf in srts:
-        with open(sf, "r", encoding="utf-8") as f:
-            sfdict[sf] = f.read()
-    parsedict = dict()
-    for sf in srts:
-        if sf in cur_keys:
-            continue
-        tempdict = dict()
-        for s in list(srt.parse(sfdict[sf])):
-            text = clean_txt(remove_names(s.content))
-            toks = [w.normalized_form() for w in tagger.tokenize(text)]
-            toks = [
-                w
-                for w in toks
-                if not (w in HIRAGANA or w in KATAKANA or w in SENTENCEMARKER)
-            ]
-            tempdict[str(s.index)] = toks
-        parsedict[str(sf)] = tempdict
-    with open(srtpath / "token_db.json", "w", encoding="utf-8") as wr:
-        json.dump(parsedict, wr)
-    return parsedict
+def create_analyze_win(ptw):
+    layout = [
+        [
+            sg.Table(
+                values=[],
+                headings=["Anime", "Overall Gain", "Vocab List Gain"],
+                auto_size_columns=False,
+                col_widths=[20, 15, 15],
+                display_row_numbers=True,
+                justification="center",
+                num_rows=30,
+                # size=(30, 60),
+                alternating_row_color="lightgrey",
+                key="-ANA-",
+                # selected_row_colors='red on yellow',
+                enable_events=True,
+                expand_x=True,
+                expand_y=True,
+                enable_click_events=True,
+            )
+        ],
+        [sg.Sizegrip()],
+    ]
+    return sg.Window("PTW", layout, ttk_theme="vista", icon=ICON, finalize=True)
 
 
 def create_settings_win(conf):
-    srtp, voc, play, know, igno = read_config_obj(conf)
+    srtp, voc, play, know, igno, yomi, ptw = read_config_obj(conf)
     layout = [
         [
             sg.Text("SRT Folder:", size=(12, 1)),
@@ -109,6 +114,16 @@ def create_settings_win(conf):
             sg.FileBrowse(initial_folder=HOME),
         ],
         [
+            sg.Text("Yomichan Dictionary:", size=(12, 1)),
+            sg.Input("" if str(yomi) == "." else yomi, k="-YP-", size=(50, 1)),
+            sg.FileBrowse(initial_folder=HOME),
+        ],
+        [
+            sg.Text("PTW Folder:", size=(12, 1)),
+            sg.Input("" if str(ptw) == "." else ptw, k="-PTW-", size=(50, 1)),
+            sg.FolderBrowse(initial_folder=HOME),
+        ],
+        [
             sg.Text("Player Path:", size=(12, 1)),
             sg.Input(
                 "Required" if str(play) == "." else play, key="-PP-", size=(50, 1)
@@ -121,64 +136,6 @@ def create_settings_win(conf):
         [sg.Button("Save"), sg.Button("Exit")],
     ]
     return sg.Window("Settings", layout, ttk_theme="vista", icon=ICON, finalize=True)
-
-
-def read_config_obj(config):
-    return (
-        Path(config["Paths"]["SrtPath"]),
-        Path(config["Paths"]["VocabPath"]),
-        Path(config["Paths"]["PlayerPath"]),
-        Path(config["Paths"]["KnownPath"]),
-        Path(config["Paths"]["IgnorePath"]),
-    )
-
-
-def check_config_valid(conf):
-    """
-    Check if the config contains the minimal needed path to run the script
-    srt path and player path
-    """
-    try:
-        srtpath = Path(conf["Paths"]["SrtPath"])
-        # print(srtpath)
-        if str(srtpath) == ".":
-            return False
-        playerpath = Path(conf["Paths"]["PlayerPath"])
-        return True
-    except KeyError as e:
-        return False
-
-
-def make_default_config(conf):
-    """
-    fill config with default keys
-    """
-    pathkeys = ["SrtPath", "VocabPath", "KnownPath", "IgnorePath", "PlayerPath"]
-    if not conf.has_section("Paths"):
-        conf["Paths"] = dict()
-    for k in pathkeys:
-        if k not in conf["Paths"]:
-            conf["Paths"][k] = ""
-    return conf
-
-
-def check_required_settings(vals):
-    if vals.get("-SRTP-") == "Required" or vals.get("-PP-") == "Required":
-        return False
-    return True
-
-
-def config_from_values(conf, vals):
-    pathkeys = ["SrtPath", "VocabPath", "KnownPath", "IgnorePath", "PlayerPath"]
-    valkeys = ["-SRTP-", "-VOCP-", "-KP-", "-IP-", "-PP-"]
-    for p, v in zip(pathkeys, valkeys):
-        conf["Paths"][p] = vals[v]
-    return conf
-
-
-def write_config(confp, conf):
-    with open(confp, "w") as configfile:
-        conf.write(configfile)
 
 
 def read_vocabs(vocpath):
@@ -200,27 +157,6 @@ def parse_subtitles(srtpath):
     return srts, sfdict, parsedict
 
 
-def pretty_path(fpath):
-    pattern = r"\[.*?\]"
-    pattern2 = r"\(.*?\)"
-    return (
-        (re.sub(pattern2, "", re.sub(pattern, "", fpath.stem)))
-        .replace(".jp", "")
-        .replace("_", " ")
-        .strip()
-    )
-
-
-def remove_names(text):
-    return re.sub(r"\（(.*?)\）", "", text)
-
-
-def clean_txt(text):
-    text = "".join(filter(ALLOWED.__contains__, text))
-    text = re.sub(r"\n+", "\n", text)
-    return text
-
-
 def search_word(
     word,
     srts,
@@ -230,6 +166,7 @@ def search_word(
     tok_mode="Exact Match",
     tagger=None,
     token_db=None,
+    freqdict=None,
 ):
     """
     searches for a word inside the subtitles. first via checking if the word appears
@@ -267,16 +204,18 @@ def search_word(
         if winhandle and prog % 5:
             winhandle["-PROG-"].update("█" * int(prog * fac))
             winhandle.refresh()
-    prettydata = [[i[0], pretty_path(i[1]), i[2], i[1]] for i in tabdata]
+
+    def freqdict_helper(word):
+        txt = freqdict.get(word, "0")
+        if txt == "0":
+            return "0"
+        wtxt, ftxt, ptxt = yp.parse_freq_text(txt)
+        return txt
+
+    prettydata = [
+        [i[0], pretty_path(i[1]), i[2], freqdict_helper(i[0]), i[1]] for i in tabdata
+    ]
     return prettydata
-
-
-def change_suffixex_to_mkv(fpath):
-    # while fpath.suffix in (".jp", ".srt"):
-    #     fpath = fpath.with_suffix("")
-    fpath = str(fpath).replace(".jp.srt", "").replace(".srt", "")
-    fpath = Path(fpath + ".mkv")
-    return fpath
 
 
 def get_layout(data, headings):
@@ -287,6 +226,7 @@ def get_layout(data, headings):
     layout = [
         [
             sg.Button("Settings"),
+            sg.Button("Analyze PTW"),
         ],
         [
             sg.Text(" " * 50),
@@ -310,7 +250,7 @@ def get_layout(data, headings):
                 values=data,
                 headings=headings,
                 auto_size_columns=False,
-                col_widths=[10, 25, 20],
+                col_widths=[10, 25, 20, 25] if len(headings) > 3 else [10, 25, 20],
                 display_row_numbers=True,
                 justification="center",
                 num_rows=30,
@@ -357,8 +297,10 @@ def sort_table(table, cols):
     return table
 
 
-def search_vocab_list(config, winhandle=None):
-    srtpath, vocpath, playpath, knowpath, ignopath = read_config_obj(config)
+def search_vocab_list(freqdict, config, winhandle=None):
+    srtpath, vocpath, playpath, knowpath, ignopath, yomipath, ptwpath = read_config_obj(
+        config
+    )
     data = list()
     vocabs = read_vocabs(vocpath)
     known = set(read_vocabs(knowpath))
@@ -371,7 +313,7 @@ def search_vocab_list(config, winhandle=None):
     fac = 51 / len(search_list)
     prog = 0
     for word in search_list:
-        data.extend(search_word(word, srts, sfdict, parsedict))
+        data.extend(search_word(word, srts, sfdict, parsedict, freqdict=freqdict))
         prog += 1
         if prog % 5:
             winhandle["-PROG-"].update("█" * int(prog * fac))
@@ -381,24 +323,16 @@ def search_vocab_list(config, winhandle=None):
 
 def main():
     if TOKENIZER:
-        # try:
         tagger = Dictionary(dict="full").create(mode=SplitMode.A)
-        # except:
-        #     raise ImportError(
-        #         "Please execute 'python -m unidic download' inside your venv. Fugashi doesn't find the dictionary file"
-        #     )
-        # if tagger.dictionary_info[0]["size"] < 872000:
-        #     raise ImportError(
-        #         "Please execute 'python -m unidic download' inside your venv. Fugashi seems to use the small dictionary"
-        #     )
     else:
         tagger = None
 
     confpath = Path(CONFNAME)
-    config = ConfigParser()
+    config = get_config_parser()
     if confpath.is_file():
         config.read(confpath)
     settings_win = None
+    ana_win = None
     if not check_config_valid(config):
         config = make_default_config(config)
         settings_win = create_settings_win(config)
@@ -413,9 +347,17 @@ def main():
                     config = config_from_values(config, values)
                     write_config(confpath, config)
                     settings_win.close()
-    srtpath, vocpath, playpath, knowpath, ignopath = read_config_obj(config)
-
-    headings = ["Word", "Anime", "Word Occurence"]
+    srtpath, vocpath, playpath, knowpath, ignopath, yomipath, ptwpath = read_config_obj(
+        config
+    )
+    if yomipath.is_file():
+        freqdict = yp.read_frequency_dict(yomipath)
+    else:
+        freqdict = dict()
+    if len(freqdict) > 1:
+        headings = ["Word", "Anime", "Word Occurence", "Frequency"]
+    else:
+        headings = ["Word", "Anime", "Word Occurence"]
     layout = get_layout([], headings)
 
     mainwin = sg.Window(
@@ -426,7 +368,7 @@ def main():
         icon=ICON,
         finalize=True,
     )
-    srts, sfdict, parsedict, data = search_vocab_list(config, mainwin)
+    srts, sfdict, parsedict, data = search_vocab_list(freqdict, config, mainwin)
     mainwin["-TABLE-"].update(data)
     token_db = make_token_db(srts, srtpath, tagger)
     while True:
@@ -437,10 +379,25 @@ def main():
         if (event == sg.WIN_CLOSED or event == "Exit") and window == settings_win:
             settings_win.close()
             settings_win = None
+        if event == sg.WIN_CLOSED and window == ana_win:
+            ana_win.close()
+            ana_win = None
         if event == "Settings":
             settings_win = create_settings_win(config)
+        if event == "Analyze PTW":
+            ana_win = create_analyze_win(ptwpath)
+            ana_data = analyze_data(
+                ptwpath=ptwpath,
+                freqdict=freqdict,
+                token_db=token_db,
+                vocab=read_vocabs(vocpath),
+            )
+            if not ana_data:
+                ana_win.close()
+            else:
+                ana_win["-ANA-"].update(ana_data)
         if event == "Save":
-            print(values)
+            # print(values)
             if window == settings_win:
                 if check_required_settings(values):
                     config = config_from_values(config, values)
@@ -449,10 +406,18 @@ def main():
                     window.close()
                     mainwin["-PROG-"].update("█" * 0)
                     mainwin.refresh()
-                    srts, sfdict, parsedict, data = search_vocab_list(config, mainwin)
-                    srtpath, vocpath, playpath, knowpath, ignopath = read_config_obj(
-                        config
+                    srts, sfdict, parsedict, data = search_vocab_list(
+                        freqdict, config, mainwin
                     )
+                    (
+                        srtpath,
+                        vocpath,
+                        playpath,
+                        knowpath,
+                        ignopath,
+                        yomipath,
+                        ptwpath,
+                    ) = read_config_obj(config)
                     if (srtpath / "token_db.json").is_file():
                         token_db = load_token_db(srtpath / "token_db.json")
                     else:
@@ -472,6 +437,7 @@ def main():
                     tagger=tagger,
                     token_db=token_db,
                     winhandle=window,
+                    freqdict=freqdict,
                 )
                 # print(data)
                 mainwin["-TABLE-"].update(data)
@@ -493,12 +459,12 @@ def main():
                     pyperclip.copy(data[int(event[2][0] or 0)][0])
                     continue
                 pyperclip.copy(data[int(event[2][0] or 0)][0])
-                mkvpath = change_suffixex_to_mkv(data[int(event[2][0] or 0)][-1])
+                mkvpath = change_suffix_to_mkv(data[int(event[2][0] or 0)][-1])
                 subprocess.Popen(
                     [
                         playpath,
                         mkvpath,
-                        f"--start={data[int(event[2][0] or 0)][-2] - timedelta(seconds=5)}",
+                        f"--start={data[int(event[2][0] or 0)][2] - timedelta(seconds=5)}",
                     ]
                 )
     mainwin.close()
