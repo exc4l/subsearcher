@@ -1,34 +1,28 @@
 import operator
-import random
-import re
-import string
 import subprocess
-
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
-from modules.text_manipulation import (
-    check_allowed_char,
-    remove_names,
-    clean_txt,
-    change_suffix_to_mkv,
-    pretty_path,
-)
-from modules.vocab_analyzer import analyze_data
-import modules.yomichan_parser as yp
-from modules.token_db_parser import make_token_db, load_token_db
-from modules.config_helper import (
-    read_config_obj,
-    check_config_valid,
-    make_default_config,
-    check_required_settings,
-    config_from_values,
-    write_config,
-    get_config_parser,
-)
+
 import pyperclip
 import PySimpleGUI as sg
 import srt
-import json
+
+import modules.yomichan_parser as yp
+from modules.config_helper import (
+    check_config_valid,
+    check_required_settings,
+    config_from_values,
+    get_config_parser,
+    make_default_config,
+    read_config_obj,
+    write_config,
+)
+from modules.text_manipulation import (
+    change_suffix_to_mkv,
+    pretty_path,
+)
+from modules.token_db_parser import load_token_db, make_token_db
+from modules.vocab_analyzer import analyze_data
 
 try:
     from sudachipy import Dictionary, SplitMode

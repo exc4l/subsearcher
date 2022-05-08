@@ -65,8 +65,8 @@ def analyze_data(
             resdata.append(
                 [
                     pretty_path(fol),
-                    _calc_score(list(vocset), freqdict),
-                    _calc_score(list(vocset), vocfreq),
+                    _calc_score(list(vocset), freqdict) // len(folsrts),
+                    _calc_score(list(vocset), vocfreq) // len(folsrts),
                 ]
             )
     # print(resdata)
