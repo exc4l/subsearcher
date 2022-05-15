@@ -19,7 +19,9 @@ from modules.config_helper import (
 )
 from modules.text_manipulation import (
     change_suffix_to_mkv,
+    clean_txt,
     pretty_path,
+    remove_names,
 )
 from modules.token_db_parser import load_token_db, make_token_db
 from modules.vocab_analyzer import analyze_data
@@ -54,6 +56,17 @@ ALLOWED = ALLKANJI | SENTENCEMARKER | KATAKANA | HIRAGANA | NUMBERS
 ROOT = Path(".").absolute().parts[0]
 HOME = Path.home()
 CONFNAME = "config.ini"
+
+PROGRESS_BAR_WIDTH = 100
+
+
+def freqdict_helper(freqdict, word):
+    txt = freqdict.get(word, "0")
+    if txt == "0":
+        # print(f"{word=}")
+        return "W: 40K F: 1K %: 0.5"
+    wtxt, ftxt, ptxt = yp.parse_freq_text(txt)
+    return txt
 
 
 def create_analyze_win(ptw):
@@ -134,8 +147,11 @@ def create_settings_win(conf):
 
 def read_vocabs(vocpath):
     if vocpath.is_file():
+        from random import shuffle
+
         with open(vocpath, "r", encoding="utf-8") as f:
-            vocabs = f.read().split()
+            vocabs = list(set(f.read().split()))
+            shuffle(vocabs)
     else:
         vocabs = [""]
     return vocabs
@@ -161,6 +177,7 @@ def search_word(
     tagger=None,
     token_db=None,
     freqdict=None,
+    tokenize_search_word=False,
 ):
     """
     searches for a word inside the subtitles. first via checking if the word appears
@@ -169,17 +186,20 @@ def search_word(
     Pretty sure that this function should look different
     """
     tabdata = list()
-    fac = 51 / len(srts)
+    fac = (PROGRESS_BAR_WIDTH + 1) / len(srts)
     prog = 0
-    if tagger:
+    if tagger and tokenize_search_word:
         tagres = tagger.tokenize(word)[0]
         tokword = tagres.normalized_form()
+    else:
+        tokword = None
     for sf in srts:
         res = list()
         if tok_mode != "Tokenizer":
             if word in sfdict[sf]:
                 for s in parsedict[sf]:
-                    if word in s.content and s.content[0] not in ["♬", "♪"]:
+                    text = clean_txt(remove_names(s.content))
+                    if word in text and s.content[0] not in ["♬", "♪"]:
                         res.append(s)
                 if len(res) > 0:
                     for r in res:
@@ -188,8 +208,12 @@ def search_word(
             tres = list()
             for ps in parsedict[sf]:
                 content = token_db[str(sf)][str(ps.index)]
-                if word in content or tokword in content:
-                    tres.append(ps)
+                if tokword:
+                    if word in content or tokword in content:
+                        tres.append(ps)
+                else:
+                    if word in content:
+                        tres.append(ps)
             if len(tres) > 0:
                 for r in tres:
                     if r not in res:
@@ -199,22 +223,20 @@ def search_word(
             winhandle["-PROG-"].update("█" * int(prog * fac))
             winhandle.refresh()
 
-    def freqdict_helper(word):
-        txt = freqdict.get(word, "0")
-        if txt == "0":
-            return "0"
-        wtxt, ftxt, ptxt = yp.parse_freq_text(txt)
-        return txt
-
     prettydata = [
-        [i[0], pretty_path(i[1]), i[2], freqdict_helper(i[0]), i[1]] for i in tabdata
+        [i[0], pretty_path(i[1]), i[2], freqdict_helper(freqdict, i[0]), i[1]]
+        for i in tabdata
     ]
     return prettydata
 
 
 def get_layout(data, headings):
     if TOKENIZER:
-        options = ["Exact Match", "Exact + Tokenizer", "Tokenizer"]
+        options = [
+            "Exact + Tokenizer",
+            "Tokenizer",
+            "Exact Match",
+        ]
     else:
         options = ["Exact Match"]
     layout = [
@@ -233,7 +255,7 @@ def get_layout(data, headings):
             sg.Text("Search Mode:", size=(10, 1)),
             sg.Combo(
                 options,
-                default_value="Exact Match",
+                default_value=options[0],
                 key="-TOKENIZER-",
                 readonly=True,
                 auto_size_text=True,
@@ -261,7 +283,7 @@ def get_layout(data, headings):
         [
             sg.Text(
                 "",
-                size=(50, 1),
+                size=(PROGRESS_BAR_WIDTH, 1),
                 relief="sunken",
                 font=("Courier", 2),
                 text_color="blue",
@@ -291,7 +313,9 @@ def sort_table(table, cols):
     return table
 
 
-def search_vocab_list(freqdict, config, winhandle=None):
+def search_vocab_list(
+    freqdict, config, top_100_freq=False, tagger=None, token_db=None, winhandle=None
+):
     srtpath, vocpath, playpath, knowpath, ignopath, yomipath, ptwpath = read_config_obj(
         config
     )
@@ -304,10 +328,41 @@ def search_vocab_list(freqdict, config, winhandle=None):
     if len(search_list) < 1:
         return srts, sfdict, parsedict, data
 
-    fac = 51 / len(search_list)
     prog = 0
+    if top_100_freq:
+
+        def parse_perc_text(txt):
+            try:
+                wtxt, ftxt, ptxt = yp.parse_freq_text(txt)
+            except Exception as e:
+                print(f"{txt=}")
+            return yp._parse_ptxt(ptxt)
+
+        search_freq_list = [
+            (word, parse_perc_text(freqdict_helper(freqdict, word)))
+            for word in search_list
+            if word
+        ]
+        search_list = [
+            w
+            for w, v in sorted(
+                search_freq_list, reverse=True, key=operator.itemgetter(1)
+            )[:100]
+        ]
+    fac = (PROGRESS_BAR_WIDTH + 1) / len(search_list)
     for word in search_list:
-        data.extend(search_word(word, srts, sfdict, parsedict, freqdict=freqdict))
+        data.extend(
+            search_word(
+                word,
+                srts,
+                sfdict,
+                parsedict,
+                tagger=tagger,
+                token_db=token_db,
+                freqdict=freqdict,
+                # tok_mode="Exact + Tokenizer",
+            )
+        )
         prog += 1
         if prog % 5:
             winhandle["-PROG-"].update("█" * int(prog * fac))
@@ -362,9 +417,18 @@ def main():
         icon=ICON,
         finalize=True,
     )
-    srts, sfdict, parsedict, data = search_vocab_list(freqdict, config, mainwin)
-    mainwin["-TABLE-"].update(data)
+    srts = list(srtpath.rglob("*.srt"))
     token_db = make_token_db(srts, srtpath, tagger)
+    srts, sfdict, parsedict, data = search_vocab_list(
+        freqdict,
+        config,
+        top_100_freq=True,
+        tagger=tagger,
+        token_db=token_db,
+        winhandle=mainwin,
+    )
+    mainwin["-TABLE-"].update(data)
+
     while True:
         window, event, values = sg.read_all_windows()
         # print(event, values)
@@ -385,11 +449,20 @@ def main():
                 freqdict=freqdict,
                 token_db=token_db,
                 vocab=read_vocabs(vocpath),
+                known_words=set(read_vocabs(knowpath)),
             )
             if not ana_data:
                 ana_win.close()
             else:
                 ana_win["-ANA-"].update(ana_data)
+                import csv
+
+                with open("ptw.csv", "w", newline="", encoding="utf-8") as csvfile:
+                    csvwriter = csv.writer(
+                        csvfile, delimiter=",", quotechar="|", quoting=csv.QUOTE_MINIMAL
+                    )
+                    for row in ana_data:
+                        csvwriter.writerow([str(item) for item in row])
         if event == "Save":
             # print(values)
             if window == settings_win:
@@ -401,7 +474,11 @@ def main():
                     mainwin["-PROG-"].update("█" * 0)
                     mainwin.refresh()
                     srts, sfdict, parsedict, data = search_vocab_list(
-                        freqdict, config, mainwin
+                        freqdict,
+                        config,
+                        tagger=tagger,
+                        token_db=token_db,
+                        winhandle=mainwin,
                     )
                     (
                         srtpath,

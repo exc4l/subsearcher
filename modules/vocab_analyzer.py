@@ -26,6 +26,7 @@ def analyze_data(
     freqdict=None,
     token_db=None,
     vocab=None,
+    known_words=None,
 ):
     if not ptwpath or not freqdict or not token_db:
         print("Nothing to do")
@@ -37,10 +38,13 @@ def analyze_data(
         for v in vals.values():
             tC.update(v)
     freqdict = freqdict.copy()
+    if known_words:
+        for k in known_words:
+            freqdict.pop(k, 0)
     for k in tC.keys():
         freqdict.pop(k, 0)
     if vocab:
-        vocfreq = {v: freqdict.get(v, "W: 100K F: 1 %: 100") for v in vocab}
+        vocfreq = {v: freqdict.get(v, "W: 40K F: 1K %: 0.5") for v in vocab}
     else:
         vocfreq = dict()
     resdata = list()
