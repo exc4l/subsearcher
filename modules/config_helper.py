@@ -45,6 +45,7 @@ def make_default_config(conf):
         "IgnorePath",
         "YomiPath",
         "PlayerPath",
+        "PTWPath",
     ]
     if not conf.has_section("Paths"):
         conf["Paths"] = dict()
