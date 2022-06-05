@@ -207,7 +207,17 @@ def search_word(
                         res.append(s)
                 if len(res) > 0:
                     for r in res:
-                        tabdata.append([word, sf, r.start])
+                        idx = r.content.find(word)
+                        idxmin = idx - 3 if (idx - 3) > 0 else 0
+                        idxmax = idx + 3 + len(word)
+                        tabdata.append(
+                            [
+                                word,
+                                sf,
+                                r.start,
+                                r.content[idxmin:idxmax].replace("\n", ""),
+                            ]
+                        )
         if tok_mode == "Exact + Tokenizer" or tok_mode == "Tokenizer":
             tres = list()
             for ps in parsedict[sf]:
@@ -226,11 +236,16 @@ def search_word(
         if winhandle and prog % 5:
             winhandle["-PROG-"].update("█" * int(prog * fac))
             winhandle.refresh()
-
-    prettydata = [
-        [i[0], pretty_path(i[1]), i[2], freqdict_helper(freqdict, i[0]), i[1]]
-        for i in tabdata
-    ]
+    if tok_mode == "Exact Match":
+        prettydata = [
+            [i[0], freqdict_helper(freqdict, i[0]), pretty_path(i[1]), i[3], i[2], i[1]]
+            for i in tabdata
+        ]
+    else:
+        prettydata = [
+            [i[0], freqdict_helper(freqdict, i[0]), pretty_path(i[1]), i[2], i[1]]
+            for i in tabdata
+        ]
     return prettydata
 
 
@@ -274,6 +289,8 @@ def get_layout(data, headings):
                 display_row_numbers=True,
                 justification="center",
                 num_rows=30,
+                font=("NotoSansJP", 14),
+                header_font=("Helvetica", 14, "bold"),
                 # size=(30, 60),
                 alternating_row_color="lightgrey",
                 key="-TABLE-",
@@ -408,7 +425,12 @@ def main():
     else:
         freqdict = dict()
     if len(freqdict) > 1:
-        headings = ["Word", "Anime", "Word Occurence", "Frequency"]
+        headings = [
+            "Word",
+            "Frequency",
+            "Anime",
+            "Word Occurence",
+        ]
     else:
         headings = ["Word", "Anime", "Word Occurence"]
     layout = get_layout([], headings)
@@ -533,13 +555,17 @@ def main():
                 if event[2][1] == 0:
                     pyperclip.copy(data[int(event[2][0] or 0)][0])
                     continue
+                # print(event)
                 pyperclip.copy(data[int(event[2][0] or 0)][0])
+                # print(f"{data[int(event[2][0] or 0)][0]=}")
                 mkvpath = change_suffix_to_mkv(data[int(event[2][0] or 0)][-1])
+                # print(f"{data[int(event[2][0] or 0)][-1]=}")
+                # print(f"{data[int(event[2][0] or 0)][2]=}")
                 subprocess.Popen(
                     [
                         playpath,
                         mkvpath,
-                        f"--start={data[int(event[2][0] or 0)][2] - timedelta(seconds=5)}",
+                        f"--start={data[int(event[2][0] or 0)][-2] - timedelta(seconds=5)}",
                     ]
                 )
     mainwin.close()
