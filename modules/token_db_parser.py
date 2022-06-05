@@ -23,7 +23,7 @@ def make_token_db(srts, srtpath, tagger):
     else:
         token_db = dict()
         cur_keys = ""
-    if set([str(s) for s in srts]).issubset(cur_keys):
+    if set([str(s.relative_to(srtpath).as_posix()) for s in srts]).issubset(cur_keys):
         return token_db
     sfdict = dict()
     for sf in srts:
@@ -31,7 +31,7 @@ def make_token_db(srts, srtpath, tagger):
             sfdict[sf] = f.read()
     parsedict = dict()
     for sf in srts:
-        if sf in cur_keys:
+        if sf.relative_to(srtpath).as_posix() in cur_keys:
             continue
         tempdict = dict()
         for s in list(srt.parse(sfdict[sf])):
@@ -39,7 +39,7 @@ def make_token_db(srts, srtpath, tagger):
             toks = [w.normalized_form() for w in tagger.tokenize(text)]
             toks = [w for w in toks if check_allowed_char(w)]
             tempdict[str(s.index)] = toks
-        parsedict[str(sf)] = tempdict
+        parsedict[str(sf.relative_to(srtpath).as_posix())] = tempdict
     token_db.update(parsedict)
     with open(srtpath / "token_db.json", "w", encoding="utf-8") as wr:
         json.dump(token_db, wr)

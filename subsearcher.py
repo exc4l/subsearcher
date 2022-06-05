@@ -190,7 +190,7 @@ def search_word(
     Pretty sure that this function should look different
     """
     tabdata = list()
-    fac = (PROGRESS_BAR_WIDTH + 1) / len(srts)
+    fac = (PROGRESS_BAR_WIDTH + 1) / (len(srts) + 1)
     prog = 0
     if tagger and tokenize_search_word:
         tagres = tagger.tokenize(word)[0]
