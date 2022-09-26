@@ -55,8 +55,10 @@ SENTENCEMARKER = set("。、!！？」「』『（）〝〟)(\n")
 ALLKANJI = set(chr(uni) for uni in range(ord("一"), ord("龯") + 1)) | set("〆々")
 ALLOWED = ALLKANJI | SENTENCEMARKER | KATAKANA | HIRAGANA | NUMBERS
 
-ROOT = Path(".").absolute().parts[0]
+ROOT = Path(__file__).parent.resolve()
+# print(ROOT)
 HOME = Path.home()
+# print(HOME)
 CONFNAME = "config.ini"
 
 PROGRESS_BAR_WIDTH = 100
@@ -221,7 +223,7 @@ def search_word(
         if tok_mode == "Exact + Tokenizer" or tok_mode == "Tokenizer":
             tres = list()
             for ps in parsedict[sf]:
-                content = token_db[str(sf)][str(ps.index)]
+                content = token_db[str(sf.relative_to(srts[0].parent))][str(ps.index)]
                 if tokword:
                     if word in content or tokword in content:
                         tres.append(ps)
@@ -289,8 +291,8 @@ def get_layout(data, headings):
                 display_row_numbers=True,
                 justification="center",
                 num_rows=30,
-                font=("NotoSansJP", 14),
-                header_font=("Helvetica", 14, "bold"),
+                font=("NotoSansJP", 16),
+                header_font=("Helvetica", 16, "bold"),
                 # size=(30, 60),
                 background_color="#202020",
                 alternating_row_color="#333333",
@@ -399,7 +401,7 @@ def main():
     else:
         tagger = None
 
-    confpath = Path(CONFNAME)
+    confpath = Path(ROOT / CONFNAME)
     config = get_config_parser()
     if confpath.is_file():
         config.read(confpath)

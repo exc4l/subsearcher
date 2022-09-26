@@ -7,6 +7,13 @@ from .text_manipulation import (
 )
 
 
+class SetEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, set):
+            return list(obj)
+        return json.JSONEncoder.default(self, obj)
+
+
 def load_token_db(fpath):
     with open(fpath, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -40,7 +47,9 @@ def make_token_db(srts, srtpath, tagger):
             toks = [w for w in toks if check_allowed_char(w)]
             tempdict[str(s.index)] = toks
         parsedict[str(sf.relative_to(srtpath).as_posix())] = tempdict
+
     token_db.update(parsedict)
     with open(srtpath / "token_db.json", "w", encoding="utf-8") as wr:
-        json.dump(token_db, wr)
+        # print(token_db)
+        json.dump(token_db, wr, cls=SetEncoder)
     return token_db

@@ -48,6 +48,7 @@ def analyze_data(
     else:
         vocfreq = dict()
     resdata = list()
+    print(f"{folders=}")
     for fol in folders:
         folsrts = list(fol.rglob("*.srt"))
         sfdict = dict()
