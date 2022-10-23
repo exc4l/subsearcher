@@ -2,6 +2,7 @@ import operator
 import subprocess
 from datetime import timedelta
 from pathlib import Path
+from tabnanny import check
 
 import pyperclip
 import PySimpleGUI as sg
@@ -22,6 +23,7 @@ from modules.text_manipulation import (
     clean_txt,
     pretty_path,
     remove_names,
+    check_allowed_char,
 )
 from modules.token_db_parser import load_token_db, make_token_db
 from modules.vocab_analyzer import analyze_data
@@ -207,17 +209,28 @@ def search_word(
                     text = clean_txt(remove_names(s.content))
                     if word in text and s.content[0] not in ["♬", "♪"]:
                         res.append(s)
-                if len(res) > 0:
+                if len(res) > 4:
                     for r in res:
                         idx = r.content.find(word)
                         idxmin = idx - 3 if (idx - 3) > 0 else 0
                         idxmax = idx + 3 + len(word)
+                        lowidx = idx - 1 if (idx - 1) > 0 else 0
+                        highidx = (
+                            idx + 1
+                            if (idx + 1) < len(r.content)
+                            else len(r.content) - 1
+                        )
+                        if len(word) == 1 and (
+                            check_allowed_char(r.content[lowidx])
+                            or check_allowed_char(r.content[highidx])
+                        ):
+                            continue
                         tabdata.append(
                             [
                                 word,
                                 sf,
                                 r.start,
-                                r.content[idxmin:idxmax].replace("\n", ""),
+                                r.content[idxmin:idxmax].replace("\n", " "),
                             ]
                         )
         if tok_mode == "Exact + Tokenizer" or tok_mode == "Tokenizer":
@@ -372,7 +385,7 @@ def search_vocab_list(
             w
             for w, v in sorted(
                 search_freq_list, reverse=True, key=operator.itemgetter(1)
-            )[:100]
+            )[:200]
         ]
     fac = (PROGRESS_BAR_WIDTH + 1) / len(search_list)
     for word in search_list:
