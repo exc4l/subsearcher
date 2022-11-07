@@ -319,15 +319,18 @@ def get_layout(data, headings):
             )
         ],  # Comment out to not enable header and other clicks
         [
-            sg.Text(
-                "",
-                size=(PROGRESS_BAR_WIDTH, 1),
-                relief="sunken",
-                font=("Courier", 2),
-                text_color="blue",
-                background_color="white",
-                key="-PROG-",
-                metadata=0,
+            # sg.Text(
+            #     "",
+            #     size=(PROGRESS_BAR_WIDTH, 1),
+            #     relief="sunken",
+            #     font=("Arial", 1),
+            #     text_color="blue",
+            #     background_color="white",
+            #     key="-PROG-",
+            #     metadata=0,
+            # ),
+            sg.ProgressBar(
+                max_value=100, orientation="h", size=(40, 5), key="progress"
             ),
             sg.Sizegrip(),
         ],
@@ -367,26 +370,25 @@ def search_vocab_list(
         return srts, sfdict, parsedict, data
 
     prog = 0
+
+    def parse_perc_text(txt):
+        try:
+            wtxt, ftxt, ptxt = yp.parse_freq_text(txt)
+        except Exception as e:
+            print(f"{txt=}")
+        return yp._parse_ptxt(ptxt)
+
+    search_freq_list = [
+        (word, parse_perc_text(freqdict_helper(freqdict, word)))
+        for word in search_list
+        if word
+    ]
+    search_list = [
+        w for w, v in sorted(search_freq_list, reverse=True, key=operator.itemgetter(1))
+    ]
     if top_100_freq:
+        search_list = search_list[:100]
 
-        def parse_perc_text(txt):
-            try:
-                wtxt, ftxt, ptxt = yp.parse_freq_text(txt)
-            except Exception as e:
-                print(f"{txt=}")
-            return yp._parse_ptxt(ptxt)
-
-        search_freq_list = [
-            (word, parse_perc_text(freqdict_helper(freqdict, word)))
-            for word in search_list
-            if word
-        ]
-        search_list = [
-            w
-            for w, v in sorted(
-                search_freq_list, reverse=True, key=operator.itemgetter(1)
-            )[:200]
-        ]
     fac = (PROGRESS_BAR_WIDTH + 1) / len(search_list)
     for word in search_list:
         data.extend(
@@ -402,8 +404,10 @@ def search_vocab_list(
             )
         )
         prog += 1
-        if prog % 5:
-            winhandle["-PROG-"].update("█" * int(prog * fac))
+        if prog % 20:
+            # winhandle["-PROG-"].update("█" * int(prog * fac))
+            winhandle["progress"].update_bar(int(prog * fac))
+            print(int(prog * fac))
             winhandle.refresh()
     return srts, sfdict, parsedict, data
 
@@ -465,7 +469,7 @@ def main():
     srts, sfdict, parsedict, data = search_vocab_list(
         freqdict,
         config,
-        top_100_freq=True,
+        top_100_freq=False,
         tagger=tagger,
         token_db=token_db,
         winhandle=mainwin,
