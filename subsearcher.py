@@ -220,10 +220,12 @@ def search_word(
                             if (idx + 1) < len(r.content)
                             else len(r.content) - 1
                         )
-                        if len(word) == 1 and (
-                            check_allowed_char(r.content[lowidx])
-                            or check_allowed_char(r.content[highidx])
-                        ):
+                        if idx == 0:
+                            if check_allowed_char(r.content[highidx]):
+                                continue
+                        elif check_allowed_char(
+                            r.content[lowidx]
+                        ) or check_allowed_char(r.content[highidx]):
                             continue
                         tabdata.append(
                             [
